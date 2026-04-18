@@ -1,76 +1,83 @@
-# Equity / ETF Market Scanner (MVP)
+# 🚀 Squeeze Radar
 
-A Streamlit dashboard that scans a universe of equities/ETFs for setups —
-breakouts, momentum, volume spikes, gaps, RSI extremes, and volatility.
+Daily ranked list of stocks with the highest probability of a **short squeeze or bull run**, driven by social sentiment + fundamentals.
 
-## Stack
+Built for buying **calls, LEAPs, or shares** on emerging retail-driven moves.
 
-- **Streamlit** — UI
-- **yfinance** — free market data (no API key). Swap later for Alpaca / Polygon / Databento.
-- **pandas / numpy** — metrics
-- **plotly** — candlestick preview
+## What it does
+
+Every run pulls **trending ticker chatter** from:
+
+- **r/wallstreetbets, r/stocks, r/options, r/SPACs, r/investing, r/daytrading, r/WallStreetbetsELITE** — via the [ApeWisdom](https://apewisdom.io/api/) aggregator (mentions + 24h velocity baked in)
+- **Stocktwits** — trending symbols + bullish/bearish message ratio
+
+...then for the top ~35 tickers by chatter, enriches with:
+
+- **Short interest** (% of float), days-to-cover, float size
+- **Options flow** — call/put volume ratio across the nearest 3 expirations, unusual call activity
+- **Price action** — 1d / 5d / 20d moves, volume ratio, distance from highs
+
+Every ticker gets scored on 4 dimensions and combined into a **0–100 Squeeze Score**:
+
+| Component | Weight | What it measures |
+|---|---|---|
+| **Social** | 35% | Mention volume (log), velocity (today vs 24h ago), Stocktwits rank, bullish tag % |
+| **Squeeze setup** | 30% | Short % of float, days-to-cover, float tightness |
+| **Options** | 20% | Call/put ratio, call volume, options activity vs avg stock volume |
+| **Price** | 15% | 5d momentum + volume ratio (already-moving confirmation) |
+
+## Two views
+
+- **🔥 Top 25** — highest Squeeze Score. Already heating up.
+- **🌱 Early movers** — social heating up but price hasn't run yet. Pre-pump setups (higher risk, higher edge).
+
+## Live URL
+
+Deployed on Streamlit Cloud — add to iPhone home screen for app-like access.
+
+## Local run
+
+```bash
+git clone https://github.com/diamondbuild/equity-scanner
+cd equity-scanner
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run app.py
+```
 
 ## Project layout
 
 ```
 equity-scanner/
-├── app.py                  # Streamlit entry point
+├── app.py                     # Streamlit UI
 ├── requirements.txt
-├── scanner/
-│   ├── data.py             # Data provider (yfinance wrapper, swappable)
-│   ├── signals.py          # Individual metric functions (RSI, ATR%, gap, etc.)
-│   └── scan.py             # Orchestrator + preset filters
-└── universes/
-    ├── sp500_sample.txt    # 50 large caps
-    └── etfs_core.txt       # 30 liquid ETFs
+├── radar/
+│   ├── social.py              # ApeWisdom + Stocktwits
+│   ├── fundamentals.py        # yfinance short interest / options / price
+│   ├── scoring.py             # 4-component scoring model
+│   └── pipeline.py            # Orchestrator + ticker cleanup/blacklist
+└── .streamlit/config.toml     # Dark theme
 ```
 
-## Run it
+## Why this combination works
 
-```bash
-cd equity-scanner
-python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-streamlit run app.py
-```
+Real short squeezes need three things to coincide:
+1. **A crowd** willing to pile in (social chatter + velocity)
+2. **Shorts to squeeze** (high short % float, tight float)
+3. **Option dealers forced to hedge** (heavy call buying → gamma squeeze dynamics)
 
-Then pick a universe, choose interval/period, and click **Run scan**.
+Each of those is a separate signal in the score, and tickers that light up on all three are the real candidates. Price confirmation keeps us honest that something's actually moving.
 
-## Metrics computed per symbol
+## Caveats
 
-| Column        | Meaning                                           |
-|---------------|---------------------------------------------------|
-| `chg_1d_%`    | Percent change vs prior bar                       |
-| `chg_5d_%`    | Percent change over last 5 bars                   |
-| `chg_20d_%`   | Percent change over last 20 bars                  |
-| `gap_%`       | Today's open vs prior close                       |
-| `vol_ratio_20`| Latest volume / 20-bar average                    |
-| `rsi_14`      | 14-period RSI (Wilder's smoothing)                |
-| `atr_%`       | ATR(14) as % of last close (normalized vol)       |
-| `dist_52wH_%` | % below trailing 252-bar high (0 = new high)      |
-| `trend_20_50` | `bull` if SMA20 ≥ SMA50, else `bear`              |
+- yfinance short interest updates ~twice a month (FINRA cycle) — treat it as structural, not real-time.
+- Options volume is delayed.
+- Stocktwits bullish/bearish tags are self-reported by posters.
+- ApeWisdom is free but can occasionally be rate-limited; retry if a scan returns empty.
 
-## Preset filters
+## Future upgrades worth considering
 
-- **Breakouts** — within 3% of 52W high + volume ≥ 1.2× avg
-- **Momentum** — 5-day gain ≥ 5% + bull trend
-- **Oversold bounce** — RSI ≤ 30 + positive daily change
-- **Overbought** — RSI ≥ 70
-- **Volume spikes** — volume ≥ 2× avg
-- **Gap up / gap down** — ±2%
-- **High volatility** — ATR% ≥ 3
-
-## Extending
-
-- **New data source:** implement the same interface as `scanner/data.py:fetch_history`
-  and swap it in `scan.py`. Good upgrade path: Alpaca (free tier, API key).
-- **New signals:** add a function to `scanner/signals.py`, wire it into `compute_row`.
-- **New preset:** add an entry to `PRESETS` in `scanner/scan.py`.
-- **Alerts:** you already have a Telegram pipeline — add a post-scan hook that
-  pushes qualifying rows to a channel.
-
-## Known limits of the free data layer
-
-- Yahoo 1-minute bars only go back ~7 days.
-- Intraday data is delayed ~15 minutes.
-- For live/streaming or survivorship-bias-free history, move to Alpaca / Polygon / Databento.
+- Telegram alert at market open with the top 10 (you already have that infra)
+- [Unusual Whales](https://unusualwhales.com/) API integration for real dark-pool + flow data (paid)
+- Historical signal tracking to backtest which score cutoffs actually predicted moves
+- Pre-market gap scanner that intersects with the squeeze list
