@@ -200,9 +200,13 @@ def _style(view: pd.DataFrame):
     fmt = {k: v for k, v in fmt.items() if k in view.columns}
     styled = view.style.format(fmt, na_rep="—")
     if "squeeze_score" in view.columns:
-        styled = styled.background_gradient(
-            subset=["squeeze_score"], cmap="RdYlGn", vmin=0, vmax=100
-        )
+        try:
+            styled = styled.background_gradient(
+                subset=["squeeze_score"], cmap="RdYlGn", vmin=0, vmax=100
+            )
+        except ImportError:
+            # matplotlib not installed — skip coloring rather than crash
+            pass
     return styled
 
 
