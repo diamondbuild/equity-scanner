@@ -117,12 +117,35 @@ def fetch_snapshot(symbol: str) -> dict:
     return out
 
 
+# Columns every snapshot row is expected to have, so downstream code can rely
+# on them existing even when yfinance returns partial data.
+EXPECTED_COLS = [
+    "ticker", "company", "sector",
+    "price", "market_cap",
+    "float_shares", "shares_out", "shares_short",
+    "short_pct_float", "short_pct_out", "days_to_cover",
+    "avg_vol_10d", "avg_vol_3m",
+    "chg_1d_%", "chg_5d_%", "chg_20d_%",
+    "vol_ratio_20", "dist_hi_%",
+    "call_vol", "put_vol", "call_put_ratio", "opt_activity_ratio",
+]
+
+
 def build_fundamentals_table(tickers: list[str], progress_cb=None) -> pd.DataFrame:
-    """Fetch snapshots for a list of tickers. `progress_cb(done, total)` optional."""
+    """Fetch snapshots for a list of tickers. `progress_cb(done, total)` optional.
+
+    Guarantees every column in EXPECTED_COLS is present, even if empty — this
+    prevents KeyErrors in downstream filtering/scoring when a given batch of
+    tickers lacks some data (e.g. no options chain, too-short history).
+    """
     rows = []
     total = len(tickers)
     for i, t in enumerate(tickers):
         rows.append(fetch_snapshot(t))
         if progress_cb:
             progress_cb(i + 1, total)
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    for col in EXPECTED_COLS:
+        if col not in df.columns:
+            df[col] = pd.NA
+    return df
