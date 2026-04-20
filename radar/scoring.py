@@ -164,19 +164,31 @@ def early_movers(df: pd.DataFrame) -> pd.DataFrame:
       - chg_5d_% <= 10 (hasn't ripped yet) — skipped if column missing
       - price > 1 (skip pure penny stocks)
     """
-    if df.empty or "score_social" not in df.columns:
+    if df.empty:
+        return pd.DataFrame()
+
+    cols = set(df.columns.tolist())
+    if "score_social" not in cols:
         return pd.DataFrame()
 
     def _col(name, default):
         """Return df[name] if present, else a constant Series of `default`."""
-        if name in df.columns:
+        if name in cols:
             return df[name].fillna(default)
         return pd.Series(default, index=df.index)
 
-    mask = (
-        (_col("score_social", 0) >= 40)
-        & (_col("reddit_velocity", 0) >= 1.5)
-        & (_col("chg_5d_%", 0) <= 10)
-        & (_col("price", 0) > 1)
-    )
-    return df[mask].sort_values("score_social", ascending=False).reset_index(drop=True)
+    try:
+        mask = (
+            (_col("score_social", 0) >= 40)
+            & (_col("reddit_velocity", 0) >= 1.5)
+            & (_col("chg_5d_%", 0) <= 10)
+            & (_col("price", 0) > 1)
+        )
+        return (
+            df[mask]
+            .sort_values("score_social", ascending=False)
+            .reset_index(drop=True)
+        )
+    except Exception:
+        # Never crash the app over the early-movers view — just return empty.
+        return pd.DataFrame()

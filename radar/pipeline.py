@@ -81,7 +81,12 @@ def build_ranked_universe(
 
     # Rank
     ranked = rank_tickers(merged)
-    early = early_movers(ranked)
+
+    # Never let the early-movers view crash the main pipeline.
+    try:
+        early = early_movers(ranked)
+    except Exception:
+        early = pd.DataFrame()
 
     top = ranked.head(25)
     return {"all": ranked, "top": top, "early": early}
