@@ -1,0 +1,3 @@
+# Scan history is written here automatically on every scan.
+# Each daily folder contains HHMM.csv snapshots.
+# aggregate.csv is a rolling 90-day rollup used for trend analysis.

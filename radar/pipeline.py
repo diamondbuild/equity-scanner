@@ -4,8 +4,10 @@ from __future__ import annotations
 import pandas as pd
 
 from .fundamentals import build_fundamentals_table
+from .history import load_aggregate
 from .scoring import rank_tickers, early_movers
 from .social import build_social_table
+from .trend import compute_trends
 
 
 # Filter tickers that look like real equity tickers (avoid junk from Reddit parsing)
@@ -82,6 +84,36 @@ def build_ranked_universe(
     # Rank
     ranked = rank_tickers(merged)
 
+    # ---- Multi-day trend bonus ---------------------------------------------
+    # Pull the rolling history and compute per-ticker climber metrics. Apply a
+    # bonus to Squeeze Score for sustained accelerators (caps at +10).
+    history = load_aggregate()
+    trends = compute_trends(history)
+    if not trends.empty:
+        trend_cols = [
+            "ticker", "days_tracked", "days_in_top20",
+            "rising_streak", "mention_slope", "score_slope", "climber_score",
+        ]
+        ranked = ranked.merge(
+            trends[trend_cols], on="ticker", how="left"
+        )
+        # Bonus: up to +10 pts from climber_score (100 -> +10)
+        bonus = (ranked["climber_score"].fillna(0) / 100 * 10).clip(lower=0, upper=10)
+        ranked["squeeze_score"] = (ranked["squeeze_score"] + bonus).clip(upper=100)
+        ranked["trend_bonus"] = bonus.round(1)
+        ranked = ranked.sort_values("squeeze_score", ascending=False).reset_index(drop=True)
+    else:
+        ranked["trend_bonus"] = 0.0
+
+    # Climbers view: sustained accelerators (high climber_score)
+    climbers = pd.DataFrame()
+    if not trends.empty:
+        climbers = (
+            ranked[ranked.get("climber_score", 0).fillna(0) >= 40]
+            .sort_values("climber_score", ascending=False)
+            .reset_index(drop=True)
+        )
+
     # Never let the early-movers view crash the main pipeline.
     try:
         early = early_movers(ranked)
@@ -89,4 +121,11 @@ def build_ranked_universe(
         early = pd.DataFrame()
 
     top = ranked.head(25)
-    return {"all": ranked, "top": top, "early": early}
+    return {
+        "all": ranked,
+        "top": top,
+        "early": early,
+        "climbers": climbers,
+        "trends": trends,
+        "history": history,
+    }

@@ -15,7 +15,9 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
+from radar.history import save_snapshot
 from radar.pipeline import build_ranked_universe
+from radar.trend import ticker_timeline
 
 # --------------------------------------------------------------- Page config --
 st.set_page_config(
@@ -110,6 +112,13 @@ if run:
             enrich_sentiment_top=sentiment_top,
             progress_cb=_cb,
         )
+        # Persist the snapshot so we can track trends over time
+        try:
+            st.session_state.save_status = save_snapshot(
+                st.session_state.results["all"]
+            )
+        except Exception as e:
+            st.session_state.save_status = {"saved": False, "reason": str(e)}
         # Also warm the cache for the non-progress path
         _cached_run.clear()
     finally:
@@ -124,6 +133,19 @@ if not results:
 top = results["top"]
 early = results["early"]
 all_ranked = results["all"]
+climbers = results.get("climbers", pd.DataFrame())
+history = results.get("history", pd.DataFrame())
+
+# Show persistence status (one line so the user knows history is being tracked)
+status = st.session_state.get("save_status")
+if status and status.get("saved"):
+    if status.get("committed"):
+        st.success(f"✅ Scan saved locally and committed to GitHub history · {status['rows']} rows")
+    else:
+        st.info(
+            f"💾 Scan saved locally ({status['rows']} rows). "
+            "Add a GITHUB_TOKEN to Streamlit Secrets to persist history across app restarts."
+        )
 
 if top.empty:
     st.error("No data returned. Try again in a minute — source APIs may be rate-limiting.")
@@ -149,8 +171,8 @@ for col, (_, row) in zip(cols, top5.iterrows()):
 
 
 # --------------------------------------------------------------------- Tabs
-tab_top, tab_early, tab_detail, tab_all = st.tabs(
-    ["Top 25", "🌱 Early movers", "Ticker detail", "Full list"]
+tab_top, tab_climbers, tab_early, tab_detail, tab_all, tab_history = st.tabs(
+    ["Top 25", "📈 Climbers", "🌱 Early movers", "Ticker detail", "Full list", "🗄️ History"]
 )
 
 
@@ -162,8 +184,9 @@ def _format_df(df: pd.DataFrame, compact: bool) -> pd.DataFrame:
         "call_put_ratio", "reddit_mentions", "reddit_velocity",
     ]
     full_cols = [
-        "ticker", "squeeze_score",
+        "ticker", "squeeze_score", "trend_bonus",
         "score_social", "score_squeeze", "score_options", "score_price",
+        "climber_score", "rising_streak", "days_in_top20",
         "price", "chg_1d_%", "chg_5d_%", "vol_ratio_20",
         "short_pct_float", "days_to_cover", "float_shares",
         "call_vol", "put_vol", "call_put_ratio",
@@ -178,10 +201,14 @@ def _format_df(df: pd.DataFrame, compact: bool) -> pd.DataFrame:
 def _style(view: pd.DataFrame):
     fmt = {
         "squeeze_score": "{:.0f}",
+        "trend_bonus": "+{:.1f}",
         "score_social": "{:.0f}",
         "score_squeeze": "{:.0f}",
         "score_options": "{:.0f}",
         "score_price": "{:.0f}",
+        "climber_score": "{:.0f}",
+        "rising_streak": "{:.0f}d",
+        "days_in_top20": "{:.0f}",
         "price": "${:,.2f}",
         "chg_1d_%": "{:+.2f}",
         "chg_5d_%": "{:+.2f}",
@@ -221,6 +248,36 @@ with tab_top:
         mime="text/csv",
         use_container_width=True,
     )
+
+with tab_climbers:
+    st.caption(
+        "Sustained accelerators — tickers climbing the rankings over multiple days. "
+        "Based on days in top 20, consecutive rising days, and mention-count slope. "
+        "This is the true pre-pump pattern."
+    )
+    if climbers.empty:
+        if history.empty or len(history.get("scanned_at", pd.Series()).dt.date.unique() if "scanned_at" in history.columns else []) < 2:
+            st.info(
+                "📌 Need at least 2 days of scan history to detect climbers. "
+                "Run a scan today and another tomorrow — climbers will start populating."
+            )
+        else:
+            st.info("No tickers meeting the climber threshold today.")
+    else:
+        climber_cols = [
+            "ticker", "squeeze_score", "climber_score", "rising_streak",
+            "days_in_top20", "days_tracked", "price", "chg_1d_%",
+            "reddit_mentions", "reddit_velocity", "short_pct_float",
+        ]
+        climber_cols = [c for c in climber_cols if c in climbers.columns]
+        st.dataframe(_style(climbers[climber_cols]), use_container_width=True, height=440)
+        st.download_button(
+            "⬇️ Climbers CSV",
+            climbers.to_csv(index=False),
+            file_name=f"climbers_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
 with tab_early:
     st.caption(
@@ -297,6 +354,60 @@ with tab_detail:
 with tab_all:
     compact_a = st.toggle("Compact view", value=False, key="compact_all")
     st.dataframe(_style(_format_df(all_ranked, compact_a)), use_container_width=True, height=560)
+
+with tab_history:
+    if history.empty:
+        st.info(
+            "No history yet. Every scan is automatically saved — come back "
+            "tomorrow and this tab will show your trend data."
+        )
+    else:
+        days = history["scanned_at"].dt.tz_convert("UTC").dt.date.nunique()
+        scans = len(history["scanned_at"].unique())
+        tickers_tracked = history["ticker"].nunique()
+        h1, h2, h3 = st.columns(3)
+        h1.metric("Days of history", days)
+        h2.metric("Scans logged", scans)
+        h3.metric("Tickers tracked", tickers_tracked)
+
+        st.markdown("**Ticker timeline**")
+        tkr_options = sorted(history["ticker"].unique())
+        default_tkr = top["ticker"].iloc[0] if not top.empty else tkr_options[0]
+        default_idx = tkr_options.index(default_tkr) if default_tkr in tkr_options else 0
+        tl_sym = st.selectbox("Ticker", tkr_options, index=default_idx, key="tl_sym")
+        tl = ticker_timeline(history, tl_sym)
+        if tl.empty:
+            st.info("No daily history for that ticker yet.")
+        else:
+            fig = go.Figure()
+            if "squeeze_score" in tl.columns:
+                fig.add_trace(go.Scatter(
+                    x=tl["day"], y=tl["squeeze_score"],
+                    name="Squeeze Score", mode="lines+markers",
+                    line=dict(color="#4CAF50", width=3),
+                ))
+            if "reddit_mentions" in tl.columns:
+                fig.add_trace(go.Scatter(
+                    x=tl["day"], y=tl["reddit_mentions"],
+                    name="Reddit mentions", mode="lines+markers",
+                    yaxis="y2", line=dict(color="#FFA726", width=2, dash="dot"),
+                ))
+            fig.update_layout(
+                height=380,
+                margin=dict(l=10, r=10, t=30, b=10),
+                title=f"{tl_sym} · daily history",
+                yaxis=dict(title="Squeeze Score", range=[0, 100]),
+                yaxis2=dict(title="Mentions", overlaying="y", side="right"),
+                legend=dict(orientation="h", y=-0.2),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("**Raw history for this ticker**")
+            show_cols = [c for c in [
+                "day", "squeeze_score", "score_social", "reddit_mentions",
+                "reddit_velocity", "price", "chg_1d_%", "short_pct_float", "call_put_ratio",
+            ] if c in tl.columns]
+            st.dataframe(tl[show_cols], use_container_width=True, height=260)
 
 # --------------------------------------------------------------------- Footer
 st.divider()
