@@ -31,6 +31,7 @@ import yfinance as yf
 from radar.history import save_snapshot
 from radar.pipeline import build_ranked_universe
 from radar.trend import ticker_timeline
+from radar.ui import inject_css, render_table
 
 # --------------------------------------------------------------- Page config --
 st.set_page_config(
@@ -99,6 +100,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# Inject the modern table CSS (fonts + theme)
+st.markdown(inject_css(), unsafe_allow_html=True)
 
 st.title("🚀 Squeeze Radar")
 st.caption("Daily short-squeeze / bull-run candidates · Reddit + Stocktwits + options flow")
@@ -318,10 +322,27 @@ def _style(view: pd.DataFrame):
     return styled
 
 
+# Column sets per view (new renderer decides how to draw each)
+COMPACT_COLS = [
+    "ticker", "squeeze_score", "signals", "short_pct_float",
+    "reddit_velocity", "call_put_ratio", "price", "chg_1d_%",
+]
+FULL_COLS = [
+    "ticker", "squeeze_score", "components", "signals",
+    "short_pct_float", "days_to_cover", "reddit_mentions", "reddit_velocity",
+    "call_put_ratio", "call_vol", "vol_ratio_20",
+    "price", "chg_1d_%", "chg_5d_%",
+]
+CLIMBER_COLS = [
+    "ticker", "squeeze_score", "climber_score", "rising_streak",
+    "days_in_top20", "signals", "short_pct_float", "reddit_velocity",
+    "reddit_mentions", "price", "chg_1d_%",
+]
+
 with tab_top:
     compact = st.toggle("Compact view", value=True, key="compact_top")
-    view = _format_df(top, compact)
-    _render_sticky(view)
+    cols = COMPACT_COLS if compact else FULL_COLS
+    st.markdown(render_table(top, cols), unsafe_allow_html=True)
     st.download_button(
         "⬇️ CSV",
         top.to_csv(index=False),
@@ -351,7 +372,7 @@ with tab_climbers:
             "reddit_mentions", "reddit_velocity", "short_pct_float",
         ]
         climber_cols = [c for c in climber_cols if c in climbers.columns]
-        _render_sticky(climbers[climber_cols])
+        st.markdown(render_table(climbers, CLIMBER_COLS), unsafe_allow_html=True)
         st.download_button(
             "⬇️ Climbers CSV",
             climbers.to_csv(index=False),
@@ -369,7 +390,8 @@ with tab_early:
         st.info("No early-mover setups matching the filter right now.")
     else:
         compact_e = st.toggle("Compact view", value=True, key="compact_early")
-        _render_sticky(_format_df(early, compact_e))
+        cols_e = COMPACT_COLS if compact_e else FULL_COLS
+        st.markdown(render_table(early, cols_e), unsafe_allow_html=True)
 
 with tab_detail:
     if top.empty:
@@ -434,7 +456,8 @@ with tab_detail:
 
 with tab_all:
     compact_a = st.toggle("Compact view", value=False, key="compact_all")
-    _render_sticky(_format_df(all_ranked, compact_a))
+    cols_a = COMPACT_COLS if compact_a else FULL_COLS
+    st.markdown(render_table(all_ranked, cols_a), unsafe_allow_html=True)
 
 with tab_history:
     if history.empty:
