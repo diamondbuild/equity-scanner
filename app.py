@@ -9,6 +9,19 @@ iPhone-friendly layout. No API keys required.
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
+
+
+def now_et() -> datetime:
+    """Current time in US Eastern — handles EST/EDT automatically."""
+    return datetime.now(ET)
+
+
+def _et_label(ts: datetime) -> str:
+    """Return 'EST' or 'EDT' depending on daylight savings at that moment."""
+    return ts.tzname() or "ET"
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -92,7 +105,8 @@ with refresh_btn:
         _cached_run.clear()
         run = True
 with ts_col:
-    st.caption(f"Now: {datetime.now().strftime('%Y-%m-%d %H:%M ET')}")
+    _now = now_et()
+    st.caption(f"Now: {_now.strftime('%Y-%m-%d %H:%M')} {_et_label(_now)}")
 
 if "results" not in st.session_state:
     st.session_state.results = None
@@ -244,7 +258,7 @@ with tab_top:
     st.download_button(
         "⬇️ CSV",
         top.to_csv(index=False),
-        file_name=f"squeeze_top_{datetime.now().strftime('%Y%m%d')}.csv",
+        file_name=f"squeeze_top_{now_et().strftime('%Y%m%d')}.csv",
         mime="text/csv",
         use_container_width=True,
     )
@@ -274,7 +288,7 @@ with tab_climbers:
         st.download_button(
             "⬇️ Climbers CSV",
             climbers.to_csv(index=False),
-            file_name=f"climbers_{datetime.now().strftime('%Y%m%d')}.csv",
+            file_name=f"climbers_{now_et().strftime('%Y%m%d')}.csv",
             mime="text/csv",
             use_container_width=True,
         )
