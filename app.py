@@ -47,6 +47,54 @@ st.markdown(
       .stButton > button { padding: 0.6rem 1rem; font-size: 1rem; }
       [data-testid="stMetricValue"] { font-size: 1.4rem; }
       [data-testid="stDataFrame"] { -webkit-overflow-scrolling: touch; }
+
+      /* ---- Sticky-ticker table (custom HTML renderer) ---- */
+      .sticky-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid rgba(250,250,250,0.1);
+        border-radius: 8px;
+        max-height: 560px;
+        overflow-y: auto;
+      }
+      table.sticky-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+        font-size: 0.88rem;
+        color: #FAFAFA;
+      }
+      table.sticky-table th, table.sticky-table td {
+        padding: 8px 10px;
+        white-space: nowrap;
+        border-bottom: 1px solid rgba(250,250,250,0.06);
+      }
+      table.sticky-table thead th {
+        position: sticky; top: 0;
+        background: #1a1f2c;
+        z-index: 3;
+        font-weight: 600;
+        text-align: right;
+      }
+      /* Freeze ticker (first) column */
+      table.sticky-table th:first-child,
+      table.sticky-table td:first-child {
+        position: sticky; left: 0;
+        background: #0f1116;
+        z-index: 2;
+        font-weight: 700;
+        text-align: left;
+        border-right: 1px solid rgba(250,250,250,0.14);
+        min-width: 76px;
+      }
+      table.sticky-table thead th:first-child {
+        z-index: 4;   /* top-left corner above both sticky row and col */
+        background: #1a1f2c;
+      }
+      table.sticky-table tbody tr:hover td { background: rgba(76,175,80,0.06); }
+      table.sticky-table td { text-align: right; }
+      table.sticky-table td:first-child { text-align: left; }
+      /* Right-align header labels for numeric columns too (they inherit text-align right already) */
     </style>
     """,
     unsafe_allow_html=True,
@@ -212,6 +260,25 @@ def _format_df(df: pd.DataFrame, compact: bool) -> pd.DataFrame:
     return df[cols]
 
 
+def _render_sticky(view: pd.DataFrame, color_score: bool = True) -> None:
+    """Render a DataFrame with the ticker column frozen on the left.
+
+    Uses the same _style() formatting + gradient as our other tables, then
+    wraps the styled HTML in a scroll container with sticky CSS.
+    """
+    if view.empty:
+        st.info("No rows.")
+        return
+    styled = _style(view)
+    # Styler.to_html() emits a <table> — we add our class via set_table_attributes
+    styled = styled.set_table_attributes('class="sticky-table"').hide(axis="index")
+    html = styled.to_html()
+    st.markdown(
+        f'<div class="sticky-table-wrap">{html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _style(view: pd.DataFrame):
     fmt = {
         "squeeze_score": "{:.0f}",
@@ -254,7 +321,7 @@ def _style(view: pd.DataFrame):
 with tab_top:
     compact = st.toggle("Compact view", value=True, key="compact_top")
     view = _format_df(top, compact)
-    st.dataframe(_style(view), use_container_width=True, height=560)
+    _render_sticky(view)
     st.download_button(
         "⬇️ CSV",
         top.to_csv(index=False),
@@ -284,7 +351,7 @@ with tab_climbers:
             "reddit_mentions", "reddit_velocity", "short_pct_float",
         ]
         climber_cols = [c for c in climber_cols if c in climbers.columns]
-        st.dataframe(_style(climbers[climber_cols]), use_container_width=True, height=440)
+        _render_sticky(climbers[climber_cols])
         st.download_button(
             "⬇️ Climbers CSV",
             climbers.to_csv(index=False),
@@ -302,7 +369,7 @@ with tab_early:
         st.info("No early-mover setups matching the filter right now.")
     else:
         compact_e = st.toggle("Compact view", value=True, key="compact_early")
-        st.dataframe(_style(_format_df(early, compact_e)), use_container_width=True, height=440)
+        _render_sticky(_format_df(early, compact_e))
 
 with tab_detail:
     if top.empty:
@@ -367,7 +434,7 @@ with tab_detail:
 
 with tab_all:
     compact_a = st.toggle("Compact view", value=False, key="compact_all")
-    st.dataframe(_style(_format_df(all_ranked, compact_a)), use_container_width=True, height=560)
+    _render_sticky(_format_df(all_ranked, compact_a))
 
 with tab_history:
     if history.empty:
