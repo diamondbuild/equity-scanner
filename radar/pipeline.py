@@ -88,20 +88,27 @@ def build_ranked_universe(
     # ---- Borrow fee enrichment (top tickers only to keep it fast) ----------
     # iborrowdesk.com exposes free IBKR borrow fee data; high fees signal
     # forced-cover pressure on shorts, a classic squeeze setup.
+    # Pre-create columns so the UI always renders them, even if fetch fails.
+    ranked["borrow_fee"] = None
+    ranked["borrow_shares_available"] = None
+    ranked["htb"] = False
+    ranked["borrow_bonus"] = 0.0
     try:
         top_tickers = ranked.head(60)["ticker"].tolist()
         if progress_cb:
             progress_cb(0.85, "Fetching borrow fees...")
         borrow = fetch_borrow_fees(top_tickers)
         if borrow:
+            def _bkey(t):
+                return t.upper() if isinstance(t, str) else t
             ranked["borrow_fee"] = ranked["ticker"].map(
-                lambda t: borrow.get(t, {}).get("borrow_fee")
+                lambda t: borrow.get(_bkey(t), {}).get("borrow_fee")
             )
             ranked["borrow_shares_available"] = ranked["ticker"].map(
-                lambda t: borrow.get(t, {}).get("borrow_shares_available")
+                lambda t: borrow.get(_bkey(t), {}).get("borrow_shares_available")
             )
             ranked["htb"] = ranked["ticker"].map(
-                lambda t: bool(borrow.get(t, {}).get("htb"))
+                lambda t: bool(borrow.get(_bkey(t), {}).get("htb"))
             )
             # Squeeze bonus from borrow fee: >5% = +5, >20% = +10, >50% = +15
             def _borrow_bonus(fee):
