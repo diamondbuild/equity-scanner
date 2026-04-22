@@ -102,8 +102,7 @@ def build_ranked_universe(
         # focus on top-ranked candidates and any early-mover-ish names.
         borrow_meta["stage"] = "head"
         check_tickers = ranked.head(60)["ticker"].tolist()
-        if progress_cb:
-            progress_cb(0.85, "Checking borrow fees...")
+        # (don't call progress_cb here — its signature is (done, total) numerics)
         borrow_meta["stage"] = "fetch"
         from .borrow import _fetch_leaderboard
         board = _fetch_leaderboard()
