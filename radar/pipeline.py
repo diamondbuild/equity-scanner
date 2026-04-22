@@ -96,13 +96,15 @@ def build_ranked_universe(
     ranked["borrow_fee"] = pd.Series([float("nan")] * len(ranked), dtype="float64")
     ranked["htb"] = False
     ranked["borrow_bonus"] = 0.0
-    borrow_meta = {"ok": False, "leaderboard_size": 0, "matched": 0, "error": None}
+    borrow_meta = {"ok": False, "leaderboard_size": 0, "matched": 0, "error": None, "stage": None}
     try:
         # Only look up tickers that might actually be on the leaderboard:
         # focus on top-ranked candidates and any early-mover-ish names.
+        borrow_meta["stage"] = "head"
         check_tickers = ranked.head(60)["ticker"].tolist()
         if progress_cb:
             progress_cb(0.85, "Checking borrow fees...")
+        borrow_meta["stage"] = "fetch"
         from .borrow import _fetch_leaderboard
         board = _fetch_leaderboard()
         borrow_meta["leaderboard_size"] = len(board)
@@ -118,6 +120,7 @@ def build_ranked_universe(
         borrow_meta["matched"] = len(borrow)
         borrow_meta["ok"] = bool(board)
         if borrow:
+            borrow_meta["stage"] = "map"
             ranked["borrow_fee"] = pd.to_numeric(
                 ranked["ticker"].map(
                     lambda t: borrow.get(t.upper() if isinstance(t, str) else t, {}).get("borrow_fee")
@@ -142,6 +145,7 @@ def build_ranked_universe(
                 if f >= 5:
                     return 5.0
                 return 0.0
+            borrow_meta["stage"] = "bonus"
             b_bonus = ranked["borrow_fee"].apply(_borrow_bonus)
             b_bonus = pd.to_numeric(b_bonus, errors="coerce").fillna(0.0)
             ranked["borrow_bonus"] = b_bonus
@@ -155,15 +159,19 @@ def build_ranked_universe(
             sq = pd.to_numeric(ranked["score_squeeze"], errors="coerce").fillna(0)
             opt = pd.to_numeric(ranked["score_options"], errors="coerce").fillna(0)
             prc = pd.to_numeric(ranked["score_price"], errors="coerce").fillna(0)
+            borrow_meta["stage"] = "recompute"
             ranked["squeeze_score"] = (
                 WEIGHTS["social"] * soc
                 + WEIGHTS["squeeze"] * sq
                 + WEIGHTS["options"] * opt
                 + WEIGHTS["price"] * prc
             ).round(1)
+            borrow_meta["stage"] = "done"
     except Exception as e:
         # Never let a borrow-fee hiccup break the full scan
-        borrow_meta["error"] = str(e)[:200]
+        import traceback
+        borrow_meta["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+        borrow_meta["trace"] = traceback.format_exc()[-500:]
 
     # ---- Multi-day trend bonus ---------------------------------------------
     # Pull the rolling history and compute per-ticker climber metrics. Apply a

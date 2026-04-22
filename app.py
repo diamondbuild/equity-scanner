@@ -239,7 +239,13 @@ if _bm:
         )
     else:
         err = _bm.get("error") or "no rows parsed"
-        st.caption(f"⚠️ Borrow leaderboard fetch failed ({err})")
+        stage = _bm.get("stage") or "?"
+        size = _bm.get("leaderboard_size", 0)
+        st.caption(f"⚠️ Borrow stage={stage} size={size} matched={_bm.get('matched',0)} err={err}")
+        trace = _bm.get("trace")
+        if trace:
+            with st.expander("Borrow debug trace"):
+                st.code(trace)
 
 if top.empty:
     st.error("No data returned. Try again in a minute — source APIs may be rate-limiting.")
