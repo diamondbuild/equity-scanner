@@ -286,6 +286,37 @@ COL_LABELS = {
     "score_price": "Price\u00a0S",
 }
 
+# Plain-English description of each column for the legend
+COL_HELP = {
+    "ticker": "Stock symbol",
+    "squeeze_score": "Overall squeeze potential (0\u2013100). Higher = more setup signals firing",
+    "components": "Mini-bars showing the 4 sub-scores that build the overall Score: Social / Squeeze / Options / Price",
+    "signals": "Which signals are firing: WSB (Reddit buzz), ST (Stocktwits top-20), C/P (call heavy), SHORT (>20% short), streak (consecutive rising days)",
+    "short_pct_float": "Short interest as % of float. 20%+ is elevated, 30%+ is heavily shorted",
+    "chg_1d_%": "Price change over 1 trading day (%)",
+    "chg_5d_%": "Price change over 5 trading days (%)",
+    "chg_20d_%": "Price change over 20 trading days (%)",
+    "reddit_velocity": "How fast Reddit mentions are accelerating. \u2191\u2191 = spiking, \u2191 = rising, \u00b7 = flat",
+    "call_put_ratio": "Call volume \u00f7 put volume. >2 = bullish options flow",
+    "price": "Latest price",
+    "reddit_mentions": "Raw Reddit mentions today across WSB + related subs",
+    "vol_ratio_20": "Today\u2019s volume \u00f7 20-day average. >2\u00d7 = unusual activity",
+    "days_to_cover": "Short shares \u00f7 avg daily volume. Higher = harder to unwind shorts",
+    "climber_score": "How strongly this ticker is trending UP across recent scans (0\u2013100)",
+    "rising_streak": "Consecutive scans where Score went up",
+    "days_in_top20": "Scans where this ticker ranked in the top 20",
+    "trend_bonus": "Bonus points added to Score from climber trend",
+    "call_vol": "Total call option volume today",
+    "put_vol": "Total put option volume today",
+    "float_shares": "Shares available to trade publicly. Smaller = more squeezable",
+    "st_rank": "Stocktwits trending rank (lower = hotter)",
+    "st_bull_pct": "Stocktwits bullish sentiment %",
+    "score_social": "Social sub-score (35% of total): Reddit + Stocktwits activity",
+    "score_squeeze": "Squeeze sub-score (30% of total): short% + days-to-cover + float",
+    "score_options": "Options sub-score (20% of total): call/put ratio + call volume",
+    "score_price": "Price sub-score (15% of total): momentum + volume ratio",
+}
+
 
 # --------------------------------------------------------------- CSS payload -
 TABLE_CSS = f"""
@@ -307,45 +338,95 @@ TABLE_CSS = f"""
     margin: 4px 0 12px 0;
   }}
 
-  /* Legend bar */
-  .prot-legend {{
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 14px;
-    padding: 8px 14px;
+  /* Column legend (collapsible) */
+  .prot-legend-box {{
     background: {BG};
     border-bottom: 1px solid {BORDER};
-    font-size: 0.72rem;
-    color: {MUTED};
-    letter-spacing: 0.02em;
   }}
-  .prot-legend-title {{
+  .prot-legend-box > summary {{
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     color: {TEXT};
+    font-size: 0.78rem;
     font-weight: 600;
-    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    user-select: none;
+  }}
+  .prot-legend-box > summary::-webkit-details-marker {{ display: none; }}
+  .prot-legend-box > summary::marker {{ content: ""; }}
+  .prot-legend-box > summary:hover {{ background: {SURFACE_HOVER}; }}
+  .prot-leg-icon {{
+    color: {ACCENT};
+    font-size: 0.95rem;
+    line-height: 1;
+  }}
+  .prot-leg-summary-text {{ flex: 0 0 auto; }}
+  .prot-leg-toggle {{
+    margin-left: auto;
+    color: {MUTED};
+    font-weight: 400;
     font-size: 0.68rem;
+    text-transform: uppercase;
     letter-spacing: 0.08em;
   }}
-  .prot-legend-item {{
-    color: {TEXT};
-    font-size: 0.72rem;
+  .prot-legend-box[open] > summary .prot-leg-toggle::after {{ content: " \2212"; }}
+  .prot-legend-box:not([open]) > summary .prot-leg-toggle::after {{ content: " +"; }}
+  .prot-leg-tags {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 0 14px 10px 14px;
   }}
-  .prot-legend-item b {{
+  .prot-leg-tag {{
+    background: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    color: {TEXT};
+  }}
+  .prot-leg-tag b {{
     color: {ACCENT};
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-weight: 700;
-    margin-right: 2px;
   }}
-  .prot-legend-hint {{
+  .prot-leg-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 4px 16px;
+    padding: 4px 14px 12px 14px;
+  }}
+  .prot-leg-row {{
+    display: flex;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    border-bottom: 1px dashed transparent;
+  }}
+  .prot-leg-col {{
+    flex: 0 0 84px;
+    color: {ACCENT};
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-align: right;
+    white-space: nowrap;
+  }}
+  .prot-leg-desc {{
     color: {MUTED};
-    font-style: italic;
-    margin-left: auto;
+    flex: 1 1 auto;
   }}
   @media (max-width: 600px) {{
-    .prot-legend-hint {{ display: none; }}
-    .prot-legend {{ gap: 6px 10px; padding: 7px 10px; }}
-    .prot-legend-item {{ font-size: 0.68rem; }}
+    .prot-leg-grid {{ grid-template-columns: 1fr; gap: 2px 0; padding: 2px 10px 10px 10px; }}
+    .prot-leg-col {{ flex: 0 0 74px; font-size: 0.66rem; }}
+    .prot-leg-desc {{ font-size: 0.68rem; }}
+    .prot-legend-box > summary {{ padding: 9px 10px; font-size: 0.74rem; }}
+    .prot-leg-toggle {{ font-size: 0.62rem; }}
   }}
   .prot-scroll {{
     overflow-x: auto;
@@ -489,19 +570,39 @@ def render_table(
         body_rows.append(f"<tr>{''.join(parts)}</tr>")
     body = "".join(body_rows)
 
-    # Legend bar — only shown when the Breakdown column is visible
-    legend = ""
+    # Column legend — collapsible <details>. Explains every column shown.
+    legend_rows = []
+    for c in columns:
+        label = COL_LABELS.get(c, c)
+        desc = COL_HELP.get(c)
+        if not desc:
+            continue
+        legend_rows.append(
+            f'<div class="prot-leg-row">'
+            f'<span class="prot-leg-col">{_esc(label)}</span>'
+            f'<span class="prot-leg-desc">{_esc(desc)}</span>'
+            f'</div>'
+        )
+    # Breakdown sub-legend (inline tags) only when that column is visible
+    breakdown_tags = ""
     if "components" in columns:
-        legend = (
-            '<div class="prot-legend">'
-            '<span class="prot-legend-title">Breakdown:</span>'
-            '<span class="prot-legend-item"><b>S</b> · Social</span>'
-            '<span class="prot-legend-item"><b>Q</b> · Squeeze</span>'
-            '<span class="prot-legend-item"><b>O</b> · Options</span>'
-            '<span class="prot-legend-item"><b>P</b> · Price</span>'
-            '<span class="prot-legend-hint">bar height = component score (0–100)</span>'
+        breakdown_tags = (
+            '<div class="prot-leg-tags">'
+            '<span class="prot-leg-tag"><b>S</b>\u00a0Social</span>'
+            '<span class="prot-leg-tag"><b>Q</b>\u00a0Squeeze</span>'
+            '<span class="prot-leg-tag"><b>O</b>\u00a0Options</span>'
+            '<span class="prot-leg-tag"><b>P</b>\u00a0Price</span>'
             '</div>'
         )
+    legend = (
+        '<details class="prot-legend-box" open>'
+        '<summary><span class="prot-leg-icon">\u24d8</span> '
+        '<span class="prot-leg-summary-text">Column guide</span>'
+        '<span class="prot-leg-toggle">tap to toggle</span></summary>'
+        f'{breakdown_tags}'
+        f'<div class="prot-leg-grid">{"".join(legend_rows)}</div>'
+        '</details>'
+    )
 
     return (
         f'<div class="prot-wrap">{legend}<div class="prot-scroll">'
