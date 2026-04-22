@@ -306,6 +306,47 @@ TABLE_CSS = f"""
     overflow: hidden;
     margin: 4px 0 12px 0;
   }}
+
+  /* Legend bar */
+  .prot-legend {{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 8px 14px;
+    background: {BG};
+    border-bottom: 1px solid {BORDER};
+    font-size: 0.72rem;
+    color: {MUTED};
+    letter-spacing: 0.02em;
+  }}
+  .prot-legend-title {{
+    color: {TEXT};
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+  }}
+  .prot-legend-item {{
+    color: {TEXT};
+    font-size: 0.72rem;
+  }}
+  .prot-legend-item b {{
+    color: {ACCENT};
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-weight: 700;
+    margin-right: 2px;
+  }}
+  .prot-legend-hint {{
+    color: {MUTED};
+    font-style: italic;
+    margin-left: auto;
+  }}
+  @media (max-width: 600px) {{
+    .prot-legend-hint {{ display: none; }}
+    .prot-legend {{ gap: 6px 10px; padding: 7px 10px; }}
+    .prot-legend-item {{ font-size: 0.68rem; }}
+  }}
   .prot-scroll {{
     overflow-x: auto;
     overflow-y: auto;
@@ -448,8 +489,22 @@ def render_table(
         body_rows.append(f"<tr>{''.join(parts)}</tr>")
     body = "".join(body_rows)
 
+    # Legend bar — only shown when the Breakdown column is visible
+    legend = ""
+    if "components" in columns:
+        legend = (
+            '<div class="prot-legend">'
+            '<span class="prot-legend-title">Breakdown:</span>'
+            '<span class="prot-legend-item"><b>S</b> · Social</span>'
+            '<span class="prot-legend-item"><b>Q</b> · Squeeze</span>'
+            '<span class="prot-legend-item"><b>O</b> · Options</span>'
+            '<span class="prot-legend-item"><b>P</b> · Price</span>'
+            '<span class="prot-legend-hint">bar height = component score (0–100)</span>'
+            '</div>'
+        )
+
     return (
-        f'<div class="prot-wrap"><div class="prot-scroll">'
+        f'<div class="prot-wrap">{legend}<div class="prot-scroll">'
         f'<table class="prot"><thead><tr>{head}</tr></thead>'
         f'<tbody>{body}</tbody></table>'
         f'</div></div>'
