@@ -171,9 +171,14 @@ def cell_num(v, fmt: str = "{:,.0f}") -> str:
     return f'<span class="num">{fmt.format(v)}</span>'
 
 
-def cell_ticker(v, company: str | None = None) -> str:
-    t = html.escape(str(v))
-    sub = f'<span class="ticker-sub">{html.escape(company)[:20]}</span>' if company else ""
+def cell_ticker(v, company=None) -> str:
+    t = html.escape(str(v)) if v is not None else ""
+    # company may be NaN (float), None, or a string — normalize safely
+    if company is None or (isinstance(company, float) and company != company):
+        sub = ""
+    else:
+        c = str(company).strip()
+        sub = f'<span class="ticker-sub">{html.escape(c)[:20]}</span>' if c and c.lower() != "nan" else ""
     return f'<div class="ticker-cell"><span class="ticker-sym">{t}</span>{sub}</div>'
 
 
@@ -225,8 +230,12 @@ def _render_value(key: str, row: dict):
         return cell_num(v, "{:.0f}")
     # default
     if isinstance(v, float):
+        if v != v:  # NaN
+            return '<span class="muted">\u2014</span>'
         return cell_num(v, "{:,.2f}")
-    return html.escape(str(v)) if v is not None else '<span class="muted">\u2014</span>'
+    if v is None:
+        return '<span class="muted">\u2014</span>'
+    return html.escape(str(v))
 
 
 COL_LABELS = {
