@@ -87,7 +87,7 @@ def cell_score_bar(v, vmin: float = 0, vmax: float = 100) -> str:
 
 
 def cell_component_bars(row: dict) -> str:
-    """Stack of 4 mini vertical bars: social / squeeze / options / price."""
+    """Stack of 5 mini vertical bars: social / squeeze / options / price / htb."""
     keys = [("score_social", "S"), ("score_squeeze", "Q"), ("score_options", "O"), ("score_price", "P")]
     bars = []
     for k, label in keys:
@@ -105,6 +105,22 @@ def cell_component_bars(row: dict) -> str:
             f'  <span class="cbar-label">{label}</span>'
             f'</div>'
         )
+    # H bar \u2014 borrow fee (cost-to-borrow). Scale: 0% \u2192 0, 100%+ \u2192 100.
+    bf = row.get("borrow_fee")
+    if _is_num(bf):
+        h = max(2, min(100, int(float(bf))))
+        color = DANGER if bf >= 20 else (WARN if bf >= 5 else "#64748B")
+        title = f"H: {float(bf):.1f}% cost-to-borrow"
+    else:
+        h = 0
+        color = MUTED
+        title = "H: n/a (no borrow data)"
+    bars.append(
+        f'<div class="cbar-wrap" title="{title}">'
+        f'  <div class="cbar" style="height:{h}%;background:{color}"></div>'
+        f'  <span class="cbar-label">H</span>'
+        f'</div>'
+    )
     return f'<div class="comp-bars">{"".join(bars)}</div>'
 
 
@@ -603,6 +619,7 @@ def render_table(
             '<span class="prot-leg-tag"><b>Q</b>\u00a0Squeeze</span>'
             '<span class="prot-leg-tag"><b>O</b>\u00a0Options</span>'
             '<span class="prot-leg-tag"><b>P</b>\u00a0Price</span>'
+            '<span class="prot-leg-tag"><b>H</b>\u00a0Hard-to-borrow</span>'
             '</div>'
         )
     legend = (
