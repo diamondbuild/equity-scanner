@@ -21,16 +21,36 @@ from typing import Iterable
 
 import requests
 
+# Note: iborrowdesk.com blocks non-browser User-Agents with HTTP 444, so we
+# send a real browser UA. It also redirects apex -> www, so we hit www directly.
 _BASE = "https://iborrowdesk.com/api/ticker/"
-_HEADERS = {"User-Agent": "squeeze-radar/1.0"}
-_TIMEOUT = 6
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_TIMEOUT = 8
 
 
 def _fetch_one(ticker: str) -> dict:
     """Return latest {fee, available} for one ticker. Empty dict on failure."""
     try:
-        r = requests.get(_BASE + ticker.upper(), headers=_HEADERS, timeout=_TIMEOUT)
+        r = requests.get(
+            _BASE + ticker.upper(),
+            headers=_HEADERS,
+            timeout=_TIMEOUT,
+            allow_redirects=True,
+        )
         if r.status_code != 200:
+            return {}
+        # Some failure modes return HTML (e.g., nginx 301 page caught mid-redirect).
+        # Ensure we actually got JSON before parsing.
+        ctype = r.headers.get("Content-Type", "")
+        if "json" not in ctype.lower() and not r.text.lstrip().startswith("{"):
             return {}
         data = r.json()
     except Exception:
@@ -71,7 +91,7 @@ def _is_htb(fee, avail) -> bool:
     return False
 
 
-def fetch_borrow_fees(tickers: Iterable[str], max_workers: int = 8) -> dict:
+def fetch_borrow_fees(tickers: Iterable[str], max_workers: int = 4) -> dict:
     """Fetch borrow info for many tickers in parallel.
 
     Returns a dict mapping uppercase ticker -> {borrow_fee, borrow_shares_available, htb}.

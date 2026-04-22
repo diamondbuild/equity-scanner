@@ -174,10 +174,6 @@ def cell_signals(row: dict) -> str:
         chips.append('<span class="chip chip-accent">C/P</span>')
     if _is_num(row.get("short_pct_float")) and row["short_pct_float"] >= 20:
         chips.append('<span class="chip chip-danger">SHORT</span>')
-    # HTB chip — hard-to-borrow means short sellers are squeezed on borrow cost
-    htb_val = row.get("htb")
-    if htb_val is True or htb_val == 1 or htb_val == "True":
-        chips.append('<span class="chip chip-danger">HTB</span>')
     if _is_num(row.get("rising_streak")) and row["rising_streak"] >= 3:
         chips.append(f'<span class="chip chip-accent">\u2191{int(row["rising_streak"])}d</span>')
     inner = " ".join(chips) if chips else '<span class="muted">\u2014</span>'
@@ -261,8 +257,6 @@ def _render_value(key: str, row: dict):
         return cell_num(v, "+{:.1f}")
     if key == "call_vol" or key == "put_vol" or key == "float_shares":
         return cell_num(v, "{:,.0f}")
-    if key == "borrow_fee":
-        return cell_borrow_fee(v)
     if key == "st_rank":
         return cell_num(v, "{:.0f}")
     if key == "st_bull_pct":
@@ -302,7 +296,6 @@ COL_LABELS = {
     "call_vol": "Calls",
     "put_vol": "Puts",
     "float_shares": "Float",
-    "borrow_fee": "Borrow",
     "st_rank": "ST #",
     "st_bull_pct": "Bull%",
     "score_social": "Social",
@@ -316,7 +309,7 @@ COL_HELP = {
     "ticker": "Stock symbol",
     "squeeze_score": "Overall squeeze potential (0\u2013100). Higher = more setup signals firing",
     "components": "Mini-bars showing the 4 sub-scores that build the overall Score: Social / Squeeze / Options / Price",
-    "signals": "Which signals are firing: WSB (Reddit buzz), ST (Stocktwits top-20), C/P (call heavy), SHORT (>20% short), HTB (hard-to-borrow), streak (consecutive rising days)",
+    "signals": "Which signals are firing: WSB (Reddit buzz), ST (Stocktwits top-20), C/P (call heavy), SHORT (>20% short), streak (consecutive rising days)",
     "short_pct_float": "Short interest as % of float. 20%+ is elevated, 30%+ is heavily shorted",
     "chg_1d_%": "Price change over 1 trading day (%)",
     "chg_5d_%": "Price change over 5 trading days (%)",
@@ -334,7 +327,6 @@ COL_HELP = {
     "call_vol": "Total call option volume today",
     "put_vol": "Total put option volume today",
     "float_shares": "Shares available to trade publicly. Smaller = more squeezable",
-    "borrow_fee": "Cost to borrow shares annualized %. >5% = elevated, >20% = hard-to-borrow, >50% = extreme squeeze pressure",
     "st_rank": "Stocktwits trending rank (lower = hotter)",
     "st_bull_pct": "Stocktwits bullish sentiment %",
     "score_social": "Social sub-score (35% of total): Reddit + Stocktwits activity",

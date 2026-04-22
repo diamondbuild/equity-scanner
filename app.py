@@ -308,18 +308,18 @@ def _style(view: pd.DataFrame):
 
 # Column sets per view (new renderer decides how to draw each)
 COMPACT_COLS = [
-    "ticker", "squeeze_score", "signals", "short_pct_float", "borrow_fee",
+    "ticker", "squeeze_score", "signals", "short_pct_float",
     "reddit_velocity", "call_put_ratio", "price", "chg_1d_%",
 ]
 FULL_COLS = [
     "ticker", "squeeze_score", "components", "signals",
-    "short_pct_float", "borrow_fee", "days_to_cover", "reddit_mentions", "reddit_velocity",
+    "short_pct_float", "days_to_cover", "reddit_mentions", "reddit_velocity",
     "call_put_ratio", "call_vol", "vol_ratio_20",
     "price", "chg_1d_%", "chg_5d_%",
 ]
 CLIMBER_COLS = [
     "ticker", "squeeze_score", "climber_score", "rising_streak",
-    "days_in_top20", "signals", "short_pct_float", "borrow_fee", "reddit_velocity",
+    "days_in_top20", "signals", "short_pct_float", "reddit_velocity",
     "reddit_mentions", "price", "chg_1d_%",
 ]
 
