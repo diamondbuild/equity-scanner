@@ -21,31 +21,53 @@ def _clip(x, lo=0, hi=100):
     return max(lo, min(hi, x))
 
 
+def _num(x):
+    """Coerce any value to a float, returning None for NA/NaN/non-numeric.
+
+    pd.NA cannot be used in truthy checks or comparisons, so we must sanitize
+    every value read from a row before arithmetic or boolean operations.
+    """
+    if x is None:
+        return None
+    try:
+        if pd.isna(x):
+            return None
+    except (TypeError, ValueError):
+        return None
+    try:
+        f = float(x)
+    except (TypeError, ValueError):
+        return None
+    if f != f:  # NaN check after cast
+        return None
+    return f
+
+
 # ------------------------------------------------------------ Component: social
 def social_score(row) -> float:
     """0-100 from Reddit mention volume + velocity + Stocktwits presence/sentiment."""
     score = 0.0
 
     # Raw mention volume (log-scaled — 1000+ mentions shouldn't be 100x a 10-mention name)
-    m = row.get("reddit_mentions") or 0
-    if m > 0:
+    m = _num(row.get("reddit_mentions"))
+    if m is not None and m > 0:
         score += _clip(np.log1p(m) / np.log1p(500) * 50, 0, 50)  # caps at 50 pts
 
     # Velocity — ratio of today vs 24h ago mentions. 2.0 = doubling, 5.0 = parabolic.
-    v = row.get("reddit_velocity")
-    if v and not pd.isna(v):
+    v = _num(row.get("reddit_velocity"))
+    if v is not None and v > 0:
         # v in [1, 5] → [0, 25], clipped
         score += _clip((v - 1) / 4 * 25, 0, 25)
 
     # Stocktwits trending rank (1 = hottest)
-    st_rank = row.get("st_rank")
-    if st_rank and not pd.isna(st_rank):
+    st_rank = _num(row.get("st_rank"))
+    if st_rank is not None and st_rank > 0:
         # rank 1 → 15 pts, rank 30 → 1 pt
         score += _clip((31 - st_rank) / 30 * 15, 0, 15)
 
     # Bullish ratio from Stocktwits tagged messages
-    bull = row.get("st_bull_pct")
-    if bull is not None and not pd.isna(bull):
+    bull = _num(row.get("st_bull_pct"))
+    if bull is not None:
         # >50% bullish → positive, <50% → penalty
         score += _clip((bull - 50) / 50 * 10, -10, 10)
 
@@ -57,19 +79,19 @@ def squeeze_score(row) -> float:
     """0-100 from short interest % float + days to cover + float tightness."""
     score = 0.0
 
-    sp = row.get("short_pct_float")  # percent
-    if sp is not None and not pd.isna(sp):
+    sp = _num(row.get("short_pct_float"))  # percent
+    if sp is not None:
         # 5% → 10 pts, 15% → 40 pts, 25%+ → 60 pts (hard squeezes usually >20%)
         score += _clip(sp / 25 * 60, 0, 60)
 
-    dtc = row.get("days_to_cover")
-    if dtc is not None and not pd.isna(dtc):
+    dtc = _num(row.get("days_to_cover"))
+    if dtc is not None:
         # 2 days → 8 pts, 5 days → 25 pts, 10+ → 30 pts
         score += _clip(dtc / 10 * 30, 0, 30)
 
     # Small float = easier to squeeze. Below 50M floats get a bonus.
-    f = row.get("float_shares")
-    if f and f > 0:
+    f = _num(row.get("float_shares"))
+    if f is not None and f > 0:
         if f < 20_000_000:
             score += 10
         elif f < 50_000_000:
@@ -85,21 +107,27 @@ def options_score(row) -> float:
     """0-100 from call/put ratio + raw call volume + activity vs avg stock volume."""
     score = 0.0
 
-    cpr = row.get("call_put_ratio")
-    if cpr is not None and not pd.isna(cpr):
-        if cpr == float("inf"):
-            score += 30
-        else:
+    cpr_raw = row.get("call_put_ratio")
+    # Special handling for infinity (no puts at all)
+    try:
+        is_inf = isinstance(cpr_raw, float) and cpr_raw == float("inf")
+    except Exception:
+        is_inf = False
+    if is_inf:
+        score += 30
+    else:
+        cpr = _num(cpr_raw)
+        if cpr is not None:
             # 1.0 = neutral → 0 pts, 3.0 → 30 pts, 5.0+ → 40 pts
             score += _clip((cpr - 1) / 4 * 40, 0, 40)
 
-    cv = row.get("call_vol") or 0
-    if cv > 0:
+    cv = _num(row.get("call_vol"))
+    if cv is not None and cv > 0:
         # log-scale: 1k calls ~15pts, 10k ~30pts, 100k ~45pts
         score += _clip(np.log10(cv + 1) / 5 * 30, 0, 30)
 
-    ar = row.get("opt_activity_ratio")  # call_vol as % of avg stock vol
-    if ar is not None and not pd.isna(ar):
+    ar = _num(row.get("opt_activity_ratio"))  # call_vol as % of avg stock vol
+    if ar is not None:
         # 1% → 5pts, 5% → 20pts, 10%+ → 30pts
         score += _clip(ar / 10 * 30, 0, 30)
 
@@ -111,13 +139,13 @@ def price_score(row) -> float:
     """0-100 confirmation that price is already reacting (or setup is tight)."""
     score = 50.0  # start neutral
 
-    c5 = row.get("chg_5d_%")
-    if c5 is not None and not pd.isna(c5):
+    c5 = _num(row.get("chg_5d_%"))
+    if c5 is not None:
         # +20% over 5d = max bonus, -10% = max penalty
         score += _clip(c5 / 20 * 25, -25, 25)
 
-    vr = row.get("vol_ratio_20")
-    if vr is not None and not pd.isna(vr):
+    vr = _num(row.get("vol_ratio_20"))
+    if vr is not None:
         # 2x avg vol = +15, 3x = +25
         score += _clip((vr - 1) * 15, 0, 25)
 
