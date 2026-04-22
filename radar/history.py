@@ -178,14 +178,28 @@ def save_snapshot(ranked: pd.DataFrame, limit: int = 40) -> dict:
 
         # 2) aggregate: fetch current, append, push
         current_agg = _fetch_aggregate_from_github()
+        # Parse timestamps on BOTH sides before concat so pandas sees a uniform
+        # datetime64 column. If we concat strings with mixed formats (old "YYYY-MM-DD HH:MM"
+        # vs new ISO "YYYY-MM-DDTHH:MM") pandas coerces the whole column and silently
+        # NaTs out the odd-format side — which was dropping every fresh scan.
+        def _parse_ts(df):
+            if "scanned_at" in df.columns:
+                df["scanned_at"] = pd.to_datetime(df["scanned_at"], utc=True, format="mixed", errors="coerce")
+            return df
+        current_agg = _parse_ts(current_agg) if not current_agg.empty else current_agg
+        snap_for_agg = _parse_ts(snap.copy())
         if current_agg.empty:
-            new_agg = snap
+            new_agg = snap_for_agg
         else:
-            new_agg = pd.concat([current_agg, snap], ignore_index=True)
+            new_agg = pd.concat([current_agg, snap_for_agg], ignore_index=True)
+        # Drop any rows whose timestamp failed to parse (shouldn't happen now)
+        new_agg = new_agg.dropna(subset=["scanned_at"])
+        # Dedupe on (ticker, scanned_at) — in case previous buggy pushes wrote dupes
+        new_agg = new_agg.drop_duplicates(subset=["ticker", "scanned_at"], keep="last")
         # Keep only last 90 days to bound file size
-        new_agg["scanned_at"] = pd.to_datetime(new_agg["scanned_at"], utc=True, errors="coerce")
         cutoff = now - pd.Timedelta(days=90)
         new_agg = new_agg[new_agg["scanned_at"] >= cutoff]
+        new_agg = new_agg.sort_values("scanned_at").reset_index(drop=True)
 
         agg_bytes = new_agg.to_csv(index=False).encode()
         ok2 = _gh_put_file(token, owner, repo, "history/aggregate.csv", agg_bytes,
