@@ -42,6 +42,27 @@ def _is_num(x) -> bool:
     return isinstance(x, (int, float)) and not (isinstance(x, float) and math.isnan(x))
 
 
+def _safe_str(x) -> str:
+    """Coerce any value to a safe string. Returns '' for None/NaN/'nan'."""
+    if x is None:
+        return ""
+    if isinstance(x, float) and math.isnan(x):
+        return ""
+    try:
+        s = str(x).strip()
+    except Exception:
+        return ""
+    if s.lower() == "nan" or s == "":
+        return ""
+    return s
+
+
+def _esc(x) -> str:
+    """HTML-escape any value safely, returning '' for None/NaN."""
+    s = _safe_str(x)
+    return html.escape(s) if s else ""
+
+
 def cell_score_bar(v, vmin: float = 0, vmax: float = 100) -> str:
     """Big primary score rendered as number + horizontal bar."""
     if not _is_num(v):
@@ -172,13 +193,9 @@ def cell_num(v, fmt: str = "{:,.0f}") -> str:
 
 
 def cell_ticker(v, company=None) -> str:
-    t = html.escape(str(v)) if v is not None else ""
-    # company may be NaN (float), None, or a string — normalize safely
-    if company is None or (isinstance(company, float) and company != company):
-        sub = ""
-    else:
-        c = str(company).strip()
-        sub = f'<span class="ticker-sub">{html.escape(c)[:20]}</span>' if c and c.lower() != "nan" else ""
+    t = _esc(v)
+    c = _safe_str(company)
+    sub = f'<span class="ticker-sub">{_esc(c[:20])}</span>' if c else ""
     return f'<div class="ticker-cell"><span class="ticker-sym">{t}</span>{sub}</div>'
 
 
@@ -230,12 +247,13 @@ def _render_value(key: str, row: dict):
         return cell_num(v, "{:.0f}")
     # default
     if isinstance(v, float):
-        if v != v:  # NaN
+        if math.isnan(v):
             return '<span class="muted">\u2014</span>'
         return cell_num(v, "{:,.2f}")
-    if v is None:
+    s = _safe_str(v)
+    if not s:
         return '<span class="muted">\u2014</span>'
-    return html.escape(str(v))
+    return html.escape(s)
 
 
 COL_LABELS = {
@@ -416,12 +434,18 @@ def render_table(
     head = "".join(
         f'<th>{COL_LABELS.get(c, c)}</th>' for c in columns
     )
-    # Body rows
+    # Body rows — any single-cell error falls back to a dash rather than
+    # crashing the whole render.
     body_rows = []
     for _, r in df.iterrows():
         row = r.to_dict()
-        cells = "".join(f"<td>{_render_value(c, row)}</td>" for c in columns)
-        body_rows.append(f"<tr>{cells}</tr>")
+        parts = []
+        for c in columns:
+            try:
+                parts.append(f"<td>{_render_value(c, row)}</td>")
+            except Exception:
+                parts.append('<td><span class="muted">\u2014</span></td>')
+        body_rows.append(f"<tr>{''.join(parts)}</tr>")
     body = "".join(body_rows)
 
     return (
