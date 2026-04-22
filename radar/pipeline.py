@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from .borrow import fetch_borrow_fees
 from .fundamentals import build_fundamentals_table
 from .history import load_aggregate
 from .scoring import rank_tickers, early_movers
@@ -83,6 +84,61 @@ def build_ranked_universe(
 
     # Rank
     ranked = rank_tickers(merged)
+
+    # ---- Borrow fee enrichment ---------------------------------------------
+    # Look up cost-to-borrow for the top-ranked tickers from the
+    # companiesmarketcap.com leaderboard of the 100 hardest-to-borrow stocks
+    # globally. Any ticker not on that list has fee < ~5%, which we treat as
+    # no squeeze pressure from borrow cost. A single HTTP call covers all
+    # tickers. Pre-create columns so the UI always has them.
+    ranked["borrow_fee"] = None
+    ranked["htb"] = False
+    ranked["borrow_bonus"] = 0.0
+    try:
+        # Only look up tickers that might actually be on the leaderboard:
+        # focus on top-ranked candidates and any early-mover-ish names.
+        check_tickers = ranked.head(60)["ticker"].tolist()
+        if progress_cb:
+            progress_cb(0.85, "Checking borrow fees...")
+        borrow = fetch_borrow_fees(check_tickers)
+        if borrow:
+            ranked["borrow_fee"] = ranked["ticker"].map(
+                lambda t: borrow.get(t.upper() if isinstance(t, str) else t, {}).get("borrow_fee")
+            )
+            ranked["htb"] = ranked["ticker"].map(
+                lambda t: bool(borrow.get(t.upper() if isinstance(t, str) else t, {}).get("htb"))
+            )
+            # Squeeze bonus from borrow fee
+            def _borrow_bonus(fee):
+                if fee is None or fee != fee:
+                    return 0.0
+                try:
+                    f = float(fee)
+                except (TypeError, ValueError):
+                    return 0.0
+                if f >= 100:
+                    return 15.0
+                if f >= 20:
+                    return 10.0
+                if f >= 5:
+                    return 5.0
+                return 0.0
+            b_bonus = ranked["borrow_fee"].apply(_borrow_bonus)
+            ranked["borrow_bonus"] = b_bonus
+            ranked["score_squeeze"] = (
+                ranked["score_squeeze"].fillna(0) + b_bonus
+            ).clip(upper=100)
+            # Recompute total with updated squeeze component
+            from .scoring import WEIGHTS
+            ranked["squeeze_score"] = (
+                WEIGHTS["social"] * ranked["score_social"].fillna(0)
+                + WEIGHTS["squeeze"] * ranked["score_squeeze"].fillna(0)
+                + WEIGHTS["options"] * ranked["score_options"].fillna(0)
+                + WEIGHTS["price"] * ranked["score_price"].fillna(0)
+            ).round(1)
+    except Exception:
+        # Never let a borrow-fee hiccup break the full scan
+        pass
 
     # ---- Multi-day trend bonus ---------------------------------------------
     # Pull the rolling history and compute per-ticker climber metrics. Apply a
