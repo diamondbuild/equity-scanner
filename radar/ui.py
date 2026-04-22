@@ -338,15 +338,13 @@ TABLE_CSS = f"""
     margin: 4px 0 12px 0;
   }}
 
-  /* Column legend (collapsible) */
+  /* Column legend */
   .prot-legend-box {{
     background: {BG};
     border-bottom: 1px solid {BORDER};
   }}
-  .prot-legend-box > summary {{
-    list-style: none;
-    cursor: pointer;
-    padding: 10px 14px;
+  .prot-leg-header {{
+    padding: 10px 14px 6px 14px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -354,27 +352,13 @@ TABLE_CSS = f"""
     font-size: 0.78rem;
     font-weight: 600;
     letter-spacing: 0.02em;
-    user-select: none;
   }}
-  .prot-legend-box > summary::-webkit-details-marker {{ display: none; }}
-  .prot-legend-box > summary::marker {{ content: ""; }}
-  .prot-legend-box > summary:hover {{ background: {SURFACE_HOVER}; }}
   .prot-leg-icon {{
     color: {ACCENT};
     font-size: 0.95rem;
     line-height: 1;
   }}
   .prot-leg-summary-text {{ flex: 0 0 auto; }}
-  .prot-leg-toggle {{
-    margin-left: auto;
-    color: {MUTED};
-    font-weight: 400;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }}
-  .prot-legend-box[open] > summary .prot-leg-toggle::after {{ content: " \2212"; }}
-  .prot-legend-box:not([open]) > summary .prot-leg-toggle::after {{ content: " +"; }}
   .prot-leg-tags {{
     display: flex;
     flex-wrap: wrap;
@@ -425,8 +409,8 @@ TABLE_CSS = f"""
     .prot-leg-grid {{ grid-template-columns: 1fr; gap: 2px 0; padding: 2px 10px 10px 10px; }}
     .prot-leg-col {{ flex: 0 0 74px; font-size: 0.66rem; }}
     .prot-leg-desc {{ font-size: 0.68rem; }}
-    .prot-legend-box > summary {{ padding: 9px 10px; font-size: 0.74rem; }}
-    .prot-leg-toggle {{ font-size: 0.62rem; }}
+    .prot-leg-header {{ padding: 9px 10px 5px 10px; font-size: 0.74rem; }}
+    .prot-leg-tags {{ padding: 0 10px 8px 10px; }}
   }}
   .prot-scroll {{
     overflow-x: auto;
@@ -595,13 +579,14 @@ def render_table(
             '</div>'
         )
     legend = (
-        '<details class="prot-legend-box" open>'
-        '<summary><span class="prot-leg-icon">\u24d8</span> '
+        '<div class="prot-legend-box">'
+        '<div class="prot-leg-header">'
+        '<span class="prot-leg-icon">\u24d8</span> '
         '<span class="prot-leg-summary-text">Column guide</span>'
-        '<span class="prot-leg-toggle">tap to toggle</span></summary>'
+        '</div>'
         f'{breakdown_tags}'
         f'<div class="prot-leg-grid">{"".join(legend_rows)}</div>'
-        '</details>'
+        '</div>'
     )
 
     return (
