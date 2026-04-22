@@ -19,9 +19,19 @@ reliable than per-ticker API calls.
 from __future__ import annotations
 
 import re
+import time
 from typing import Iterable
 
 import requests
+
+# ---- In-process cache ------------------------------------------------------
+# The upstream data (companiesmarketcap.com) is pulled from Interactive Brokers'
+# end-of-day borrow-fee feed, so it refreshes at most once a day. Re-fetching
+# every scan wastes ~5s and ~1.6MB. Keep the merged leaderboard in memory for
+# 1 hour — long enough to make rapid re-scans instant, short enough that a
+# long-running app picks up the next day's numbers within an hour.
+_CACHE_TTL_SECONDS = 3600
+_cache: dict = {"board": None, "ts": 0.0}
 
 _BASE_URL = "https://companiesmarketcap.com/companies-with-the-highest-cost-to-borrow/"
 # We fetch the top ~N pages (100 rows each). Pages 1-10 cover every ticker
@@ -79,13 +89,25 @@ def _page_url(page: int) -> str:
     return _BASE_URL if page <= 1 else f"{_BASE_URL}page/{page}/"
 
 
-def _fetch_leaderboard(pages: int = _PAGES_TO_FETCH) -> dict:
+def _fetch_leaderboard(pages: int = _PAGES_TO_FETCH, force: bool = False) -> dict:
     """Fetch and parse the top N pages of the leaderboard.
 
     Returns merged {ticker: fee_pct}. If a ticker appears on multiple pages
     (shouldn't, but defensive), the highest fee wins. Returns {} on total
     failure; partial failures just mean fewer tickers covered.
+
+    Cached in-process for `_CACHE_TTL_SECONDS` to avoid re-fetching 1.6MB on
+    every scan — upstream refreshes at most daily anyway. Pass force=True to
+    bypass the cache (e.g. for a manual "refresh now" button).
     """
+    now = time.time()
+    if (
+        not force
+        and _cache["board"] is not None
+        and (now - _cache["ts"]) < _CACHE_TTL_SECONDS
+    ):
+        return _cache["board"]
+
     merged: dict = {}
     sess = requests.Session()
     sess.headers.update(_HEADERS)
@@ -103,7 +125,19 @@ def _fetch_leaderboard(pages: int = _PAGES_TO_FETCH) -> dict:
                 break
         except Exception:
             continue
+
+    # Only cache a non-empty result — don't poison the cache if the site blocked us.
+    if merged:
+        _cache["board"] = merged
+        _cache["ts"] = now
     return merged
+
+
+def cache_age_seconds() -> float | None:
+    """How old the in-memory leaderboard is (for UI diagnostics). None if never cached."""
+    if _cache["board"] is None:
+        return None
+    return time.time() - _cache["ts"]
 
 
 def _is_htb(fee: float | None) -> bool:

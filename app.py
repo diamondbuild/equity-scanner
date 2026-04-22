@@ -233,9 +233,15 @@ if status and status.get("saved"):
 _bm = results.get("borrow_meta") if isinstance(results, dict) else None
 if _bm:
     if _bm.get("ok"):
+        try:
+            from radar.borrow import cache_age_seconds
+            age = cache_age_seconds()
+            age_str = "fresh" if age is None or age < 5 else f"{int(age/60)}m old"
+        except Exception:
+            age_str = "?"
         st.caption(
-            f"Borrow leaderboard: {_bm['leaderboard_size']} names loaded, "
-            f"{_bm['matched']} of top-60 tickers matched"
+            f"Borrow leaderboard: {_bm['leaderboard_size']} names loaded "
+            f"(cache {age_str}), {_bm['matched']} of top-60 tickers matched"
         )
     else:
         err = _bm.get("error") or "no rows parsed"
