@@ -141,21 +141,9 @@ with st.sidebar:
 
 
 # ------------------------------------------------------------------- Run scan
-@st.cache_data(show_spinner=False, ttl=1800)  # 30-min cache
-def _cached_run(max_candidates: int, sentiment_top: int) -> dict:
-    return build_ranked_universe(
-        max_candidates=max_candidates,
-        enrich_sentiment_top=sentiment_top,
-    )
-
-
-top_btn, refresh_btn, ts_col = st.columns([1, 1, 2])
-with top_btn:
+run_col, ts_col = st.columns([1, 3])
+with run_col:
     run = st.button("🔍 Run scan", type="primary", use_container_width=True)
-with refresh_btn:
-    if st.button("♻️ Force refresh", use_container_width=True):
-        _cached_run.clear()
-        run = True
 with ts_col:
     _now = now_et()
     st.caption(f"Now: {_now.strftime('%Y-%m-%d %H:%M')} {_et_label(_now)}")
@@ -169,11 +157,9 @@ if run:
     def _cb(done, total):
         prog.progress(done / max(total, 1), text=f"Enriching {done}/{total} tickers…")
 
-    # We re-run through cache but pass a dummy progress so first call shows motion
+    # Always fetch fresh — each scan pulls live social/fundamentals data.
     try:
-        # Streamlit's cache doesn't run the callback when cached — re-route
-        from radar.pipeline import build_ranked_universe as _build
-        st.session_state.results = _build(
+        st.session_state.results = build_ranked_universe(
             max_candidates=max_candidates,
             enrich_sentiment_top=sentiment_top,
             progress_cb=_cb,
@@ -185,8 +171,6 @@ if run:
             )
         except Exception as e:
             st.session_state.save_status = {"saved": False, "reason": str(e)}
-        # Also warm the cache for the non-progress path
-        _cached_run.clear()
     finally:
         prog.empty()
 
