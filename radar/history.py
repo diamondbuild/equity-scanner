@@ -43,6 +43,8 @@ SNAPSHOT_COLS = [
     "chg_1d_%",
     "chg_5d_%",
     "vol_ratio_20",
+    "borrow_fee",
+    "htb",
 ]
 
 ROOT = Path(__file__).resolve().parents[1]

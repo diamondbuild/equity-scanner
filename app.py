@@ -229,6 +229,18 @@ if status and status.get("saved"):
             "Add a GITHUB_TOKEN to Streamlit Secrets to persist history across app restarts."
         )
 
+# Borrow-fee diagnostic caption
+_bm = results.get("borrow_meta") if isinstance(results, dict) else None
+if _bm:
+    if _bm.get("ok"):
+        st.caption(
+            f"Borrow leaderboard: {_bm['leaderboard_size']} names loaded, "
+            f"{_bm['matched']} of top-60 tickers matched"
+        )
+    else:
+        err = _bm.get("error") or "no rows parsed"
+        st.caption(f"⚠️ Borrow leaderboard fetch failed ({err})")
+
 if top.empty:
     st.error("No data returned. Try again in a minute — source APIs may be rate-limiting.")
     st.stop()

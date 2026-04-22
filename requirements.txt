@@ -1,4 +1,4 @@
-# v2026-04-22-borrow-fee
+# v2026-04-22-borrow-diag
 streamlit>=1.32
 yfinance>=0.2.40
 pandas>=2.1

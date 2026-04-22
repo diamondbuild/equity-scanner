@@ -94,13 +94,27 @@ def build_ranked_universe(
     ranked["borrow_fee"] = None
     ranked["htb"] = False
     ranked["borrow_bonus"] = 0.0
+    borrow_meta = {"ok": False, "leaderboard_size": 0, "matched": 0, "error": None}
     try:
         # Only look up tickers that might actually be on the leaderboard:
         # focus on top-ranked candidates and any early-mover-ish names.
         check_tickers = ranked.head(60)["ticker"].tolist()
         if progress_cb:
             progress_cb(0.85, "Checking borrow fees...")
-        borrow = fetch_borrow_fees(check_tickers)
+        from .borrow import _fetch_leaderboard
+        board = _fetch_leaderboard()
+        borrow_meta["leaderboard_size"] = len(board)
+        borrow = {}
+        if board:
+            for t in check_tickers:
+                if not isinstance(t, str):
+                    continue
+                key = t.upper()
+                fee = board.get(key)
+                if fee is not None:
+                    borrow[key] = {"borrow_fee": fee, "htb": fee >= 5.0}
+        borrow_meta["matched"] = len(borrow)
+        borrow_meta["ok"] = bool(board)
         if borrow:
             ranked["borrow_fee"] = ranked["ticker"].map(
                 lambda t: borrow.get(t.upper() if isinstance(t, str) else t, {}).get("borrow_fee")
@@ -136,9 +150,9 @@ def build_ranked_universe(
                 + WEIGHTS["options"] * ranked["score_options"].fillna(0)
                 + WEIGHTS["price"] * ranked["score_price"].fillna(0)
             ).round(1)
-    except Exception:
+    except Exception as e:
         # Never let a borrow-fee hiccup break the full scan
-        pass
+        borrow_meta["error"] = str(e)[:200]
 
     # ---- Multi-day trend bonus ---------------------------------------------
     # Pull the rolling history and compute per-ticker climber metrics. Apply a
@@ -184,4 +198,5 @@ def build_ranked_universe(
         "climbers": climbers,
         "trends": trends,
         "history": history,
+        "borrow_meta": borrow_meta,
     }
