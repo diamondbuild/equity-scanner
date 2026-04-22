@@ -91,7 +91,9 @@ def build_ranked_universe(
     # globally. Any ticker not on that list has fee < ~5%, which we treat as
     # no squeeze pressure from borrow cost. A single HTTP call covers all
     # tickers. Pre-create columns so the UI always has them.
-    ranked["borrow_fee"] = None
+    # Use numeric NaN (not None) so the column is float dtype from the start —
+    # prevents object-dtype propagation that caused '>' int/str sort errors.
+    ranked["borrow_fee"] = pd.Series([float("nan")] * len(ranked), dtype="float64")
     ranked["htb"] = False
     ranked["borrow_bonus"] = 0.0
     borrow_meta = {"ok": False, "leaderboard_size": 0, "matched": 0, "error": None}
@@ -116,8 +118,11 @@ def build_ranked_universe(
         borrow_meta["matched"] = len(borrow)
         borrow_meta["ok"] = bool(board)
         if borrow:
-            ranked["borrow_fee"] = ranked["ticker"].map(
-                lambda t: borrow.get(t.upper() if isinstance(t, str) else t, {}).get("borrow_fee")
+            ranked["borrow_fee"] = pd.to_numeric(
+                ranked["ticker"].map(
+                    lambda t: borrow.get(t.upper() if isinstance(t, str) else t, {}).get("borrow_fee")
+                ),
+                errors="coerce",
             )
             ranked["htb"] = ranked["ticker"].map(
                 lambda t: bool(borrow.get(t.upper() if isinstance(t, str) else t, {}).get("htb"))
@@ -138,17 +143,23 @@ def build_ranked_universe(
                     return 5.0
                 return 0.0
             b_bonus = ranked["borrow_fee"].apply(_borrow_bonus)
+            b_bonus = pd.to_numeric(b_bonus, errors="coerce").fillna(0.0)
             ranked["borrow_bonus"] = b_bonus
-            ranked["score_squeeze"] = (
-                ranked["score_squeeze"].fillna(0) + b_bonus
-            ).clip(upper=100)
+            # Force numeric on sub-scores before arithmetic to avoid object-dtype
+            # propagating a '>' int/str comparison error downstream.
+            ss_num = pd.to_numeric(ranked["score_squeeze"], errors="coerce").fillna(0)
+            ranked["score_squeeze"] = (ss_num + b_bonus).clip(upper=100)
             # Recompute total with updated squeeze component
             from .scoring import WEIGHTS
+            soc = pd.to_numeric(ranked["score_social"], errors="coerce").fillna(0)
+            sq = pd.to_numeric(ranked["score_squeeze"], errors="coerce").fillna(0)
+            opt = pd.to_numeric(ranked["score_options"], errors="coerce").fillna(0)
+            prc = pd.to_numeric(ranked["score_price"], errors="coerce").fillna(0)
             ranked["squeeze_score"] = (
-                WEIGHTS["social"] * ranked["score_social"].fillna(0)
-                + WEIGHTS["squeeze"] * ranked["score_squeeze"].fillna(0)
-                + WEIGHTS["options"] * ranked["score_options"].fillna(0)
-                + WEIGHTS["price"] * ranked["score_price"].fillna(0)
+                WEIGHTS["social"] * soc
+                + WEIGHTS["squeeze"] * sq
+                + WEIGHTS["options"] * opt
+                + WEIGHTS["price"] * prc
             ).round(1)
     except Exception as e:
         # Never let a borrow-fee hiccup break the full scan
