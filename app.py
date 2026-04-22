@@ -159,20 +159,52 @@ if run:
 
     # Always fetch fresh — each scan pulls live social/fundamentals data.
     try:
-        st.session_state.results = build_ranked_universe(
+        new_results = build_ranked_universe(
             max_candidates=max_candidates,
             enrich_sentiment_top=sentiment_top,
             progress_cb=_cb,
         )
-        # Persist the snapshot so we can track trends over time
-        try:
-            st.session_state.save_status = save_snapshot(
-                st.session_state.results["all"]
-            )
-        except Exception as e:
-            st.session_state.save_status = {"saved": False, "reason": str(e)}
+        # --- Health check: detect yfinance throttling ----------------------
+        # Yahoo Finance rate-limits Streamlit Cloud's IP pool intermittently.
+        # When that happens, every ticker comes back with no price / short%,
+        # and scores collapse to nonsense (social + neutral-50 price only).
+        # Detect that and refuse to overwrite the previous good results.
+        all_df = new_results.get("all")
+        yf_failed = False
+        if all_df is not None and not all_df.empty:
+            rows = len(all_df)
+            # Count rows with at least one key fundamentals field populated
+            has_price = all_df["price"].notna().sum() if "price" in all_df.columns else 0
+            has_short = all_df["short_pct_float"].notna().sum() if "short_pct_float" in all_df.columns else 0
+            has_options = all_df["call_put_ratio"].notna().sum() if "call_put_ratio" in all_df.columns else 0
+            # If more than half the rows are missing price AND options, yfinance bombed
+            if rows > 0 and has_price < rows * 0.5 and has_options < rows * 0.3:
+                yf_failed = True
+
+        if yf_failed:
+            st.session_state.yf_failure = True
+            # Keep whatever previous results we had, don't overwrite with junk
+        else:
+            st.session_state.yf_failure = False
+            st.session_state.results = new_results
+            # Persist the snapshot so we can track trends over time
+            try:
+                st.session_state.save_status = save_snapshot(
+                    st.session_state.results["all"]
+                )
+            except Exception as e:
+                st.session_state.save_status = {"saved": False, "reason": str(e)}
     finally:
         prog.empty()
+
+# Show yfinance-throttling banner if the last scan failed fundamentals
+if st.session_state.get("yf_failure"):
+    st.error(
+        "⚠️ **Yahoo Finance throttled this scan** — fundamentals data (price, "
+        "short %, options) came back empty for most tickers, so the results "
+        "would be unreliable. Showing your previous scan instead. Try again in "
+        "a few minutes."
+    )
 
 results = st.session_state.results
 
