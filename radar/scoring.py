@@ -186,7 +186,7 @@ def early_movers(df: pd.DataFrame) -> pd.DataFrame:
         )
         return (
             df[mask]
-            .sort_values("score_social", ascending=False)
+            .sort_values("squeeze_score", ascending=False)
             .reset_index(drop=True)
         )
     except Exception:
